@@ -1,0 +1,11 @@
+cat > backend/.gitignore << 'EOF'
+__pycache__/
+*.py[cod]
+.env
+.venv
+venv/
+*.egg-info/
+.pytest_cache/
+htmlcov/
+.coverage
+EOF
