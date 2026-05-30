@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime, date, timezone
 from decimal import Decimal
-from sqlalchemy import String, DateTime, ForeignKey, Float, Text, Date, Numeric
+from sqlalchemy import String,Boolean, DateTime, ForeignKey, Float, Text, Date, Numeric
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from app.core.database import Base
@@ -29,6 +29,7 @@ class ExtractedData(Base):
     tax_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="USD")
+    is_multi_currency: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     payment_terms: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)
