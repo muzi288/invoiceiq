@@ -30,7 +30,7 @@ class AuditLog(Base):
         nullable=True
     )
     action: Mapped[str] = mapped_column(String(50), nullable=False)
-    metadata: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
+    extra_data: Mapped[dict] = mapped_column(JSONB, nullable=False, default=dict)
     ip_address: Mapped[str | None] = mapped_column(String(45), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
