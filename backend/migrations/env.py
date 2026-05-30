@@ -8,8 +8,12 @@ from dotenv import load_dotenv
 # Add backend directory to path so we can import app modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Load .env file
-load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
+
+# Explicitly point to backend/.env
+dotenv_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".env")
+load_dotenv(dotenv_path)
+
+
 
 from app.core.database import Base
 from app.models import (
