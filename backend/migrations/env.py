@@ -3,9 +3,13 @@ from sqlalchemy import engine_from_config, pool
 from alembic import context
 import sys
 import os
+from dotenv import load_dotenv
 
 # Add backend directory to path so we can import app modules
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# Load .env file
+load_dotenv(os.path.join(os.path.dirname(os.path.dirname(__file__)), ".env"))
 
 from app.core.database import Base
 from app.models import (
@@ -23,7 +27,10 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-# This is what Alembic reads to know what tables to create
+# Override sqlalchemy.url with value from .env
+database_url = os.getenv("DATABASE_URL", "")
+config.set_main_option("sqlalchemy.url", database_url)
+
 target_metadata = Base.metadata
 
 
