@@ -29,3 +29,5 @@ class Tenant(Base):
     users = relationship("User", back_populates="tenant")
     invoices = relationship("Invoice", back_populates="tenant")
     audit_logs = relationship("AuditLog", back_populates="tenant")
+    vendor_profiles = relationship("VendorProfile", back_populates="tenant")
+

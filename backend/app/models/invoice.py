@@ -1,6 +1,6 @@
 import uuid
-from datetime import datetime, timezone
-from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer, Text, ARRAY
+from datetime import datetime, date, timezone
+from sqlalchemy import String, Boolean, DateTime, ForeignKey, Integer, Text, ARRAY, Date
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
@@ -48,6 +48,14 @@ class Invoice(Base):
         ForeignKey("users.id"),
         nullable=True
     )
+    payment_status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="unpaid"
+    )
+    payment_date: Mapped[date | None] = mapped_column(Date, nullable=True
+    )
+    payment_ref: Mapped[str | None] = mapped_column(String(100), nullable=True
+    )
+
     upload_date: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

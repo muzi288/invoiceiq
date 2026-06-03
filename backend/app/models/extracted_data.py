@@ -30,6 +30,7 @@ class ExtractedData(Base):
     total_amount: Mapped[Decimal | None] = mapped_column(Numeric(12, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(10), nullable=False, default="USD")
     is_multi_currency: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    is_recurring: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     payment_terms: Mapped[str | None] = mapped_column(String(100), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
     confidence_score: Mapped[float | None] = mapped_column(Float, nullable=True)

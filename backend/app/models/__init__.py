@@ -5,6 +5,8 @@ from app.models.invoice import Invoice
 from app.models.extracted_data import ExtractedData
 from app.models.line_item import LineItem
 from app.models.audit_log import AuditLog
+from app.models.vendor_profile import VendorProfile
+
 
 __all__ = [
     "Tenant",
@@ -13,5 +15,6 @@ __all__ = [
     "Invoice",
     "ExtractedData",
     "LineItem",
-    "AuditLog",
+    "AuditLog"
+    "VendorProfile",
 ]
