@@ -22,6 +22,10 @@ class Settings(BaseSettings):
 
     # Anthropic
     ANTHROPIC_API_KEY: str
+    GEMINI_API_KEY: str = ""
+    OPENROUTER_API_KEY: str = ""
+    EXTRACTION_PROVIDER: str = "gemini"
+
 
     # Redis
     REDIS_URL: str = "redis://localhost:6379"
