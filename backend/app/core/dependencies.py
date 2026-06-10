@@ -40,9 +40,9 @@ async def get_current_user(
 
     # Set tenant_id as PostgreSQL session variable for RLS
     await db.execute(
-        text("SET app.tenant_id = :tenant_id"),
-        {"tenant_id": tenant_id}
+    text(f"SET app.tenant_id = '{tenant_id}'")
     )
+
 
     # Fetch user from database
     result = await db.execute(

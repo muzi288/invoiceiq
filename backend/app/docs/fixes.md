@@ -45,3 +45,12 @@
 
 ---
 
+## FIX-005 — asyncpg Does Not Support Parameterized SET Statements
+**Date:** June 2026
+**Error:** `PostgresSyntaxError: syntax error at or near "$1"` on `SET app.tenant_id = $1`
+**Cause:** asyncpg does not support parameterized SET statements. SET is a session configuration command, not a data query, and asyncpg refuses parameter substitution for it.
+**Fix:** Embedded the tenant_id UUID directly into the SQL string using an f-string: `text(f"SET app.tenant_id = '{tenant_id}'")`
+**Safety:** tenant_id is a UUID extracted from a signed JWT token — not raw user input. UUIDs contain only hex characters and hyphens, making SQL injection impossible here.
+**File:** `backend/app/core/dependencies.py`
+
+
