@@ -1,7 +1,10 @@
 from pydantic import BaseModel
 from datetime import datetime, date
 from decimal import Decimal
+from typing import Any
 import uuid
+
+from app.schemas.invoice import InvoiceResponse
 
 
 class ExtractedDataResponse(BaseModel):
@@ -16,6 +19,7 @@ class ExtractedDataResponse(BaseModel):
     total_amount: Decimal | None
     currency: str
     is_multi_currency: bool
+    is_recurring: bool
     payment_terms: str | None
     notes: str | None
     confidence_score: float | None
@@ -47,7 +51,3 @@ class InvoiceWithDataResponse(BaseModel):
     signed_url: str | None
 
     model_config = {"from_attributes": True}
-
-
-# Import here to avoid circular import
-from app.schemas.invoice import InvoiceResponse

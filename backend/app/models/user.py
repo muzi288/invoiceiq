@@ -42,5 +42,6 @@ class User(Base):
 
     # Relationships
     tenant = relationship("Tenant", back_populates="users")
-    invoices = relationship("Invoice", back_populates="uploaded_by_user")
+    invoices = relationship("Invoice", back_populates="uploaded_by_user", foreign_keys="[Invoice.uploaded_by]")
+
     audit_logs = relationship("AuditLog", back_populates="user")

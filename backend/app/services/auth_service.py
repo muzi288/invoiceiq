@@ -10,7 +10,7 @@ from app.core.security import hash_password, verify_password, create_access_toke
 from app.schemas.auth import RegisterRequest, LoginRequest, TokenResponse
 
 # Prevents timing attacks — see architecture.md Authentication section
-DUMMY_HASH = "$2b$12$dummy.hash.to.waste.time.and.prevent.timing.attack.xx"
+DUMMY_HASH = "$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/lewohkyMkPmPJLEWy"
 
 
 async def register_tenant(
