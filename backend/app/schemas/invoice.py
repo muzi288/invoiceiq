@@ -25,6 +25,9 @@ class InvoiceResponse(BaseModel):
     upload_date: datetime
     processed_at: datetime | None
     deleted_at: datetime | None
+    payment_status: str = "unpaid"
+    payment_date: date | None = None
+    payment_ref: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_
 from typing import Optional
 import uuid
 import math
@@ -63,6 +63,7 @@ async def get_audit_log(
     limit: int = Query(default=50, ge=1, le=200),
     user_id: Optional[uuid.UUID] = Query(default=None),
     invoice_id: Optional[uuid.UUID] = Query(default=None),
+    invoice_search: Optional[str] = Query(default=None),
     action: Optional[str] = Query(default=None),
     date_from: Optional[str] = Query(default=None),
     date_to: Optional[str] = Query(default=None),
@@ -77,6 +78,15 @@ async def get_audit_log(
         query = query.where(AuditLog.user_id == user_id)
     if invoice_id:
         query = query.where(AuditLog.invoice_id == invoice_id)
+    elif invoice_search:
+        pattern = f"%{invoice_search}%"
+        matching_invoices = select(ExtractedData.invoice_id).where(
+            or_(
+                ExtractedData.vendor_name.ilike(pattern),
+                ExtractedData.invoice_number.ilike(pattern),
+            )
+        )
+        query = query.where(AuditLog.invoice_id.in_(matching_invoices))
     if action:
         query = query.where(AuditLog.action == action)
     if date_from:

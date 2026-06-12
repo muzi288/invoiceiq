@@ -77,6 +77,14 @@
 
 ## Product Upgrades
 
+### FIX-007 — Audit Log Used Raw Invoice UUIDs for Filtering
+**Date:** June 2026
+**Symptom:** Audit page required typing an invoice UUID to filter — unusable for non-technical users.
+**Fix:** Replaced UUID text input with user dropdown, vendor/invoice number search (`invoice_search` API param), date range filters, click-to-filter on user names, and "Filter this invoice" on each row. Invoice detail deep links pass `invoice_label` for a readable pinned banner.
+**Files:** `backend/app/api/routes/audit.py`, `frontend/src/pages/Audit.jsx`, `frontend/src/pages/InvoiceDetail.jsx`
+
+---
+
 See **[product-upgrades.md](./product-upgrades.md)** for the full SaaS Phase 1 changelog covering:
 
 - Dashboard vendor names, totals, search, and category filters

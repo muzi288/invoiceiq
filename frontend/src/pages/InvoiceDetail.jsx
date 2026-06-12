@@ -2,8 +2,8 @@ import { useState, useEffect } from 'react'
 import { useParams, useNavigate, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  getInvoice, getInvoiceFile, approveInvoice, rejectInvoice,
-  updateExtracted, updateLineItems, reExtractInvoice,
+  getInvoice, getInvoiceFile, getAuditLog, approveInvoice, rejectInvoice,
+  updateExtracted, updateLineItems, reExtractInvoice, updateInvoice, deleteInvoice,
 } from '../services/api'
 import useAuthStore from '../store/authStore'
 import Layout from '../components/Layout'
@@ -23,6 +23,13 @@ const EXTRACTED_FIELDS = [
 
 const EMPTY_LINE = { description: '', quantity: '', unit_price: '', total_price: '', currency: 'USD' }
 
+const CATEGORIES = [
+  'uncategorised', 'inventory', 'utilities', 'equipment',
+  'payroll', 'travel', 'office', 'other',
+]
+
+const PAYMENT_STATUSES = ['unpaid', 'paid', 'partial', 'overdue']
+
 export default function InvoiceDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
@@ -34,6 +41,9 @@ export default function InvoiceDetail() {
   const [lineForm, setLineForm] = useState([])
   const [rejectReason, setRejectReason] = useState('')
   const [showReject, setShowReject] = useState(false)
+  const [editingMeta, setEditingMeta] = useState(false)
+  const [metaForm, setMetaForm] = useState({})
+  const [showAudit, setShowAudit] = useState(false)
 
   const { data, isLoading, error } = useQuery({
     queryKey: ['invoice', id],
@@ -96,13 +106,65 @@ export default function InvoiceDetail() {
     },
   })
 
+  const metaMutation = useMutation({
+    mutationFn: (payload) => updateInvoice(id, payload),
+    onSuccess: () => { invalidate(); setEditingMeta(false) },
+  })
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteInvoice(id),
+    onSuccess: () => navigate('/dashboard'),
+  })
+
+  const { data: auditData } = useQuery({
+    queryKey: ['audit', id, 'inline'],
+    queryFn: () => getAuditLog({ invoice_id: id, limit: 20 }),
+    select: (res) => res.data,
+    enabled: showAudit && !!id,
+  })
+
   if (isLoading) return <Layout><div className="text-gray-400 text-sm py-8 text-center">Loading...</div></Layout>
   if (error) return <Layout><div className="text-red-400 text-sm py-8 text-center">Failed to load invoice</div></Layout>
 
   const { invoice, extracted_data, line_items } = data
-  const canApprove = user?.role === 'owner' || user?.can_approve
+  const isOwner = user?.role === 'owner'
+  const canApprove = isOwner || user?.can_approve
   const isExtracting = !['completed', 'failed'].includes(invoice.extraction_status)
   const canEdit = invoice.status === 'pending_review' && extracted_data
+
+  const lineItemsTotal = line_items?.reduce((sum, item) => sum + (Number(item.total_price) || 0), 0) ?? 0
+  const headerTotal = Number(extracted_data?.total_amount) || 0
+  const totalsMismatch = extracted_data?.total_amount != null && line_items?.length > 0
+    && Math.abs(lineItemsTotal - headerTotal) > 0.01
+
+  const startMetaEdit = () => {
+    setMetaForm({
+      category: invoice.category || 'uncategorised',
+      tags: (invoice.tags || []).join(', '),
+      payment_status: invoice.payment_status || 'unpaid',
+      payment_date: invoice.payment_date || '',
+      payment_ref: invoice.payment_ref || '',
+    })
+    setEditingMeta(true)
+  }
+
+  const saveMeta = () => {
+    metaMutation.mutate({
+      category: metaForm.category,
+      tags: metaForm.tags.split(',').map((t) => t.trim()).filter(Boolean),
+      payment_status: metaForm.payment_status,
+      payment_date: metaForm.payment_date || null,
+      payment_ref: metaForm.payment_ref || null,
+    })
+  }
+
+  const handleReExtract = () => {
+    const edited = extracted_data?.edited_at
+    const msg = edited
+      ? 'This invoice was manually edited. Re-extraction will replace all extracted data and line items. Continue?'
+      : 'Re-run AI extraction? Existing extracted data will be replaced.'
+    if (confirm(msg)) reExtractMutation.mutate()
+  }
 
   const startEdit = () => {
     const form = {}
@@ -164,18 +226,30 @@ export default function InvoiceDetail() {
           </span>
           {!isExtracting && invoice.status !== 'approved' && (
             <button
-              onClick={() => {
-                if (confirm('Re-run AI extraction? Existing extracted data will be replaced.')) {
-                  reExtractMutation.mutate()
-                }
-              }}
+              onClick={handleReExtract}
               disabled={reExtractMutation.isPending}
               className="text-xs text-blue-400 hover:text-blue-300 border border-blue-800 px-2 py-1 rounded"
             >
               Re-extract
             </button>
           )}
-          <Link to={`/audit?invoice_id=${id}`} className="text-xs text-gray-400 hover:text-white">Audit →</Link>
+          {isOwner && (
+            <>
+              <button
+                type="button"
+                onClick={() => setShowAudit((v) => !v)}
+                className="text-xs text-gray-400 hover:text-white"
+              >
+                {showAudit ? 'Hide history' : 'History'}
+              </button>
+              <Link
+                to={`/audit?invoice_id=${id}&invoice_label=${encodeURIComponent(extracted_data?.vendor_name || 'Invoice')}`}
+                className="text-xs text-gray-500 hover:text-white"
+              >
+                Full audit →
+              </Link>
+            </>
+          )}
         </div>
       </div>
 
@@ -207,6 +281,93 @@ export default function InvoiceDetail() {
         </div>
 
         <div className="space-y-4">
+          <div className="bg-gray-900 border border-gray-800 rounded">
+            <div className="px-4 py-2 border-b border-gray-800 flex justify-between">
+              <span className="text-xs text-gray-400 font-medium uppercase">Invoice Details</span>
+              {!editingMeta && (
+                <button onClick={startMetaEdit} className="text-xs text-amber-400 hover:text-amber-300">Edit</button>
+              )}
+            </div>
+            <div className="p-4 space-y-3">
+              {editingMeta ? (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Category</label>
+                    <select value={metaForm.category} onChange={(e) => setMetaForm({ ...metaForm, category: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 text-white px-2 py-1 rounded text-sm">
+                      {CATEGORIES.map((c) => <option key={c} value={c}>{c}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Tags (comma separated)</label>
+                    <input value={metaForm.tags} onChange={(e) => setMetaForm({ ...metaForm, tags: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 text-white px-2 py-1 rounded text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Payment status</label>
+                    <select value={metaForm.payment_status} onChange={(e) => setMetaForm({ ...metaForm, payment_status: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 text-white px-2 py-1 rounded text-sm">
+                      {PAYMENT_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Payment date</label>
+                    <input type="date" value={metaForm.payment_date} onChange={(e) => setMetaForm({ ...metaForm, payment_date: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 text-white px-2 py-1 rounded text-sm" />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-gray-500 mb-1">Payment reference</label>
+                    <input value={metaForm.payment_ref} onChange={(e) => setMetaForm({ ...metaForm, payment_ref: e.target.value })}
+                      className="w-full bg-gray-800 border border-gray-700 text-white px-2 py-1 rounded text-sm" />
+                  </div>
+                  <div className="flex gap-2 pt-2">
+                    <button onClick={saveMeta} className="flex-1 bg-amber-500 text-black text-xs py-1.5 rounded font-medium">Save</button>
+                    <button onClick={() => setEditingMeta(false)} className="flex-1 bg-gray-800 text-gray-400 text-xs py-1.5 rounded">Cancel</button>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {[
+                    ['Category', invoice.category],
+                    ['Tags', invoice.tags?.length ? invoice.tags.join(', ') : '—'],
+                    ['Payment', invoice.payment_status || 'unpaid'],
+                    ['Paid on', invoice.payment_date || '—'],
+                    ['Payment ref', invoice.payment_ref || '—'],
+                  ].map(([label, value]) => (
+                    <div key={label} className="flex justify-between gap-4">
+                      <span className="text-xs text-gray-500">{label}</span>
+                      <span className="text-sm text-white text-right capitalize">{value}</span>
+                    </div>
+                  ))}
+                </>
+              )}
+            </div>
+          </div>
+
+          {showAudit && (
+            <div className="bg-gray-900 border border-gray-800 rounded">
+              <div className="px-4 py-2 border-b border-gray-800">
+                <span className="text-xs text-gray-400 font-medium uppercase">Activity History</span>
+              </div>
+              <div className="p-4 space-y-2 max-h-48 overflow-y-auto">
+                {auditData?.items?.length ? auditData.items.map((log) => (
+                  <div key={log.id} className="text-xs border-b border-gray-800/50 pb-2">
+                    <div className="flex justify-between gap-2">
+                      <span className="text-amber-400 capitalize">{log.action.replace(/_/g, ' ')}</span>
+                      <span className="text-gray-600">{new Date(log.created_at).toLocaleString()}</span>
+                    </div>
+                    <p className="text-gray-500 mt-0.5">{log.user_name} ({log.user_role})</p>
+                    {log.extra_data && Object.keys(log.extra_data).length > 0 && (
+                      <p className="text-gray-600 mt-0.5 truncate">{JSON.stringify(log.extra_data)}</p>
+                    )}
+                  </div>
+                )) : (
+                  <p className="text-gray-500 text-sm text-center">No activity yet</p>
+                )}
+              </div>
+            </div>
+          )}
+
           <div className="bg-gray-900 border border-gray-800 rounded">
             <div className="px-4 py-2 border-b border-gray-800 flex justify-between">
               <span className="text-xs text-gray-400 font-medium uppercase">Extracted Data</span>
@@ -257,7 +418,12 @@ export default function InvoiceDetail() {
                     {extracted_data.confidence_score != null && (
                       <div className="pt-2 border-t border-gray-800 flex justify-between">
                         <span className="text-xs text-gray-500">Confidence</span>
-                        <span className="text-xs text-gray-400">{(extracted_data.confidence_score * 100).toFixed(0)}%</span>
+                        <span className={`text-xs ${
+                          extracted_data.confidence_score < 0.8 ? 'text-amber-400' : 'text-gray-400'
+                        }`}>
+                          {(extracted_data.confidence_score * 100).toFixed(0)}%
+                          {extracted_data.confidence_score < 0.8 && ' — review suggested'}
+                        </span>
                       </div>
                     )}
                   </>
@@ -303,6 +469,11 @@ export default function InvoiceDetail() {
                 </div>
               ) : line_items?.length > 0 ? (
                 <div className="space-y-2">
+                  {totalsMismatch && (
+                    <p className="text-amber-400 text-xs mb-2">
+                      Line items total ({lineItemsTotal.toFixed(2)}) does not match invoice total ({headerTotal.toFixed(2)})
+                    </p>
+                  )}
                   {line_items.map((item, i) => (
                     <div key={i} className="flex justify-between text-sm gap-4">
                       <span className="text-gray-300">{item.description || '—'}</span>
@@ -335,6 +506,19 @@ export default function InvoiceDetail() {
                 <button onClick={() => setShowReject(false)} className="flex-1 bg-gray-800 text-gray-400 text-sm py-1.5 rounded">Cancel</button>
               </div>
             </div>
+          )}
+
+          {isOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Delete this invoice? This cannot be undone.')) deleteMutation.mutate()
+              }}
+              disabled={deleteMutation.isPending}
+              className="w-full text-red-500 hover:text-red-400 text-xs py-2 border border-red-900 rounded"
+            >
+              Delete invoice
+            </button>
           )}
         </div>
       </div>

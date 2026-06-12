@@ -20,16 +20,20 @@ export default function Dashboard() {
   const [categoryFilter, setCategoryFilter] = useState('')
   const [search, setSearch] = useState('')
   const [searchInput, setSearchInput] = useState('')
+  const [dateFrom, setDateFrom] = useState('')
+  const [dateTo, setDateTo] = useState('')
   const [page, setPage] = useState(1)
 
   const { data, isLoading, error } = useQuery({
-    queryKey: ['invoices', page, statusFilter, categoryFilter, search],
+    queryKey: ['invoices', page, statusFilter, categoryFilter, search, dateFrom, dateTo],
     queryFn: () => getInvoices({
       page,
       limit: 20,
       status: statusFilter || undefined,
       category: categoryFilter || undefined,
       search: search || undefined,
+      date_from: dateFrom || undefined,
+      date_to: dateTo || undefined,
     }),
     select: (res) => res.data,
   })
@@ -101,6 +105,29 @@ export default function Dashboard() {
             <option key={c} value={c}>{c}</option>
           ))}
         </select>
+        <input
+          type="date"
+          value={dateFrom}
+          onChange={(e) => { setDateFrom(e.target.value); setPage(1) }}
+          className="bg-gray-800 border border-gray-700 text-gray-300 text-xs px-2 py-1 rounded"
+          title="From date"
+        />
+        <input
+          type="date"
+          value={dateTo}
+          onChange={(e) => { setDateTo(e.target.value); setPage(1) }}
+          className="bg-gray-800 border border-gray-700 text-gray-300 text-xs px-2 py-1 rounded"
+          title="To date"
+        />
+        {(dateFrom || dateTo) && (
+          <button
+            type="button"
+            onClick={() => { setDateFrom(''); setDateTo(''); setPage(1) }}
+            className="text-gray-500 hover:text-white text-xs px-2"
+          >
+            Clear dates
+          </button>
+        )}
       </div>
 
       {isLoading && <div className="text-gray-400 text-sm py-8 text-center">Loading...</div>}

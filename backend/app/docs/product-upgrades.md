@@ -43,9 +43,21 @@ This document records the Phase 1 SaaS upgrades: dashboard UX, editing workflows
 ### Audit
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/audit?invoice_id=` | Filter audit log by invoice |
+| GET | `/audit?user_id=` | Filter by team member |
+| GET | `/audit?invoice_id=` | Pin to a single invoice (used from invoice detail deep link) |
+| GET | `/audit?invoice_search=` | Filter by vendor name or invoice number (human-readable search) |
+| GET | `/audit?action=` | Filter by action type |
+| GET | `/audit?date_from=` / `date_to=` | Filter by date range |
 
 **Enriched audit response fields:** `user_name`, `user_role`, `invoice_label`
+
+**Audit UI filtering (no UUID typing required):**
+- User dropdown populated from `GET /users`
+- Vendor / invoice number search via `invoice_search`
+- Date range pickers
+- Click a user name in the table to filter by that user
+- Click "Filter this invoice" on a row to pin that invoice
+- Deep link from invoice detail: `/audit?invoice_id={id}&invoice_label={vendor}`
 
 ---
 
@@ -133,16 +145,33 @@ This document records the Phase 1 SaaS upgrades: dashboard UX, editing workflows
 
 ---
 
+## Phase 1 Polish (completed)
+
+| Item | Description |
+|------|-------------|
+| Dashboard date filters | `date_from` / `date_to` pickers on invoice list |
+| Invoice metadata UI | Edit category, tags, payment status/date/ref on detail page |
+| Payment fields in API | `payment_status`, `payment_date`, `payment_ref` on `InvoiceResponse` |
+| Inline activity history | Owner can toggle per-invoice history panel on detail page |
+| Delete invoice | Owner delete button on detail page |
+| Line total mismatch warning | Amber alert when line items sum ≠ invoice total |
+| Low confidence hint | Flags extraction confidence below 80% |
+| Re-extract guard | Warns if invoice was manually edited before re-running AI |
+| Audit expandable details | Click "Show details" for formatted `extra_data` JSON |
+| Audit human-friendly filters | User dropdown, vendor/invoice search, date range, click-to-filter from rows |
+
+---
+
 ## Verification Checklist
 
-1. **Dashboard** — rows show vendor name and total; search finds invoices by vendor
-2. **Invoice detail** — edit all extracted fields; edit line items; click Re-extract on failed invoice
-3. **Audit** — shows user names; click invoice link opens detail; filter by invoice ID
+1. **Dashboard** — rows show vendor name and total; search finds invoices by vendor; date range filters work
+2. **Invoice detail** — edit extracted fields, line items, and metadata (category/tags/payment); re-extract on failure
+3. **Audit** — user names, invoice links, expandable details; filter by user, vendor search, date range, or click-to-pin invoice
 4. **Vendors** — list appears after extractions; detail shows recent invoices
 5. **Team** (owner) — invite staff; toggle can_approve / can_export
 6. **Settings** — save currency and timezone
-7. **Export** — download CSV; check audit log for `exported` entry
-8. **Upload** — add tags; verify they appear on invoice detail header
+7. **Export** — download CSV; audit log shows `exported` entry
+8. **Upload** — add tags; edit tags later on detail page
 
 ---
 
@@ -152,6 +181,5 @@ This document records the Phase 1 SaaS upgrades: dashboard UX, editing workflows
 - Stripe/billing and plan enforcement
 - Password change / email verification flow
 - PostgreSQL RLS policies in migrations
-- Payment status UI on invoice detail
 - Custom tenant-defined categories
 - Automated tests
