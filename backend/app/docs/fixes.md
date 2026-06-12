@@ -53,4 +53,23 @@
 **Safety:** tenant_id is a UUID extracted from a signed JWT token — not raw user input. UUIDs contain only hex characters and hyphens, making SQL injection impossible here.
 **File:** `backend/app/core/dependencies.py`
 
+---
+
+### FIX-006 — Invoice Detail Could Not Show Original Document Side-by-Side
+**Date:** June 2026
+**Symptom:** On the invoice detail page, users could not view the original invoice document alongside extracted data. PDFs showed only a placeholder with an external link; images loaded via Azure SAS URLs often failed to render in the app.
+**Cause:** Three related issues:
+1. **PDFs were not embedded** — the frontend rendered a static placeholder instead of an inline viewer for `file_type === 'pdf'`.
+2. **SAS URLs cannot carry JWT auth** — `<iframe>` and `<img>` tags cannot send the `Authorization` header, so direct Azure blob URLs are unreliable for in-app viewing and may fail due to CORS or expired tokens.
+3. **TanStack Query v5 `refetchInterval` bug** — the polling callback received the `query` object, not invoice data, so extraction status polling never stopped correctly.
+
+**Fix:**
+- **Backend:** Added `GET /invoices/{invoice_id}/file` to stream the original file through the authenticated API. Added `download_file()` in `storage_service.py`. Wrapped `generate_signed_url()` in try/except so a storage error does not break the entire invoice detail response.
+- **Frontend:** Fetches the file via `getInvoiceFile()` with JWT auth, creates a blob URL with `URL.createObjectURL()`, and embeds PDFs in an `<iframe>` and images in an `<img>`. Improved layout with a taller viewer (`min-h-[70vh]`) and a sticky left panel on large screens.
+- **Frontend:** Corrected `refetchInterval` to read `query.state.data?.invoice?.extraction_status`.
+
+**Files:** `backend/app/api/routes/invoices.py`, `backend/app/services/invoice_service.py`, `backend/app/services/storage_service.py`, `frontend/src/pages/InvoiceDetail.jsx`, `frontend/src/services/api.js`
+
+**Verification:** Open any completed invoice on the detail page. The original document should appear on the left; extracted data and line items on the right. Check Network tab for `GET /invoices/{id}/file` returning `200` with the correct `Content-Type` (`application/pdf`, `image/jpeg`, or `image/png`).
+
 

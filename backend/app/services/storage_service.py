@@ -76,14 +76,41 @@ async def upload_file(
     return file_path, file_hash, len(contents)
 
 
+FILE_TYPE_CONTENT_TYPES = {
+    "pdf": "application/pdf",
+    "jpeg": "image/jpeg",
+    "png": "image/png",
+}
+
+
+def download_file(file_path: str) -> tuple[bytes, str]:
+    """Download a file from Azure Blob Storage. Returns (contents, content_type)."""
+    client = get_blob_client()
+    container = client.get_container_client(settings.AZURE_STORAGE_CONTAINER_NAME)
+    blob = container.download_blob(file_path)
+    contents = blob.readall()
+    extension = file_path.rsplit(".", 1)[-1].lower()
+    content_type = FILE_TYPE_CONTENT_TYPES.get(extension, "application/octet-stream")
+    return contents, content_type
+
+
 def generate_signed_url(file_path: str) -> str:
     """
-    Generate a signed URL for viewing a file.
-    URL expires in 15 minutes.
+    Generate a long-lived signed URL for viewing a file.
     """
     client = get_blob_client()
     account_name = client.account_name
-    account_key = client.credential.account_key
+    
+    # --- FIXED: Parse key securely from connection string dict mapping ---
+    account_key = None
+    conn_str = settings.AZURE_STORAGE_CONNECTION_STRING
+    for pair in conn_str.split(";"):
+        if pair.startswith("AccountKey="):
+            account_key = pair.split("=", 1)[1]
+            break
+
+    if not account_key:
+        raise ValueError("AccountKey could not be resolved from Azure Connection String.")
 
     sas_token = generate_blob_sas(
         account_name=account_name,
@@ -91,7 +118,7 @@ def generate_signed_url(file_path: str) -> str:
         blob_name=file_path,
         account_key=account_key,
         permission=BlobSasPermissions(read=True),
-        expiry=datetime.now(timezone.utc) + timedelta(minutes=15),
+        expiry=datetime.now(timezone.utc) + timedelta(hours=24), # Generous 24-hour window
     )
 
     return (

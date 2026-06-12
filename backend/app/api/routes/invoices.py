@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Request, UploadFile, File, Form, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
 import uuid
@@ -63,6 +64,24 @@ async def get_invoices(
         category=category,
         date_from=date_from,
         date_to=date_to,
+    )
+
+
+@router.get("/{invoice_id}/file")
+async def get_invoice_file(
+    invoice_id: uuid.UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    contents, content_type = await invoice_service.get_invoice_file(
+        invoice_id=invoice_id,
+        current_user=current_user,
+        db=db,
+    )
+    return Response(
+        content=contents,
+        media_type=content_type,
+        headers={"Cache-Control": "private, max-age=3600"},
     )
 
 

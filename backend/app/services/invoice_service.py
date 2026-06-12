@@ -10,13 +10,14 @@ from app.models.extracted_data import ExtractedData
 from app.models.line_item import LineItem
 from app.models.user import User
 from app.services.audit_service import log_action
-from app.services.storage_service import upload_file, generate_signed_url
+from app.services.storage_service import upload_file, generate_signed_url, download_file
 
 
 async def upload_invoice(
     file: UploadFile,
     category: str,
     tags: list[str],
+
     current_user: User,
     db: AsyncSession,
     ip_address: str | None = None,
@@ -218,8 +219,11 @@ async def get_invoice(
     )
     line_items = line_items_result.scalars().all()
 
-    # Generate fresh signed URL
-    signed_url = generate_signed_url(invoice.file_path)
+    # Generate fresh signed URL (non-fatal if Azure config is unavailable)
+    try:
+        signed_url = generate_signed_url(invoice.file_path)
+    except Exception:
+        signed_url = None
 
     return {
         "invoice": invoice,
@@ -227,6 +231,41 @@ async def get_invoice(
         "line_items": line_items,
         "signed_url": signed_url,
     }
+
+
+async def get_invoice_file(
+    invoice_id: uuid.UUID,
+    current_user: User,
+    db: AsyncSession,
+) -> tuple[bytes, str]:
+    """Download the original invoice file for authenticated viewing."""
+    query = select(Invoice).where(
+        and_(
+            Invoice.id == invoice_id,
+            Invoice.tenant_id == current_user.tenant_id,
+            Invoice.deleted_at == None,
+        )
+    )
+
+    if current_user.role == "staff":
+        query = query.where(Invoice.uploaded_by == current_user.id)
+
+    result = await db.execute(query)
+    invoice = result.scalar_one_or_none()
+
+    if not invoice:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Invoice not found"
+        )
+
+    try:
+        return download_file(invoice.file_path)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Failed to retrieve invoice file"
+        ) from exc
 
 
 async def approve_invoice(

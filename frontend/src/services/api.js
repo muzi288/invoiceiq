@@ -37,6 +37,7 @@ export const logout = () => api.post('/auth/logout')
 // Invoices
 export const getInvoices = (params) => api.get('/invoices', { params })
 export const getInvoice = (id) => api.get(`/invoices/${id}`)
+export const getInvoiceFile = (id) => api.get(`/invoices/${id}/file`, { responseType: 'blob' })
 export const uploadInvoice = (formData) => api.post('/invoices/upload', formData, {
   headers: { 'Content-Type': 'multipart/form-data' }
 })
