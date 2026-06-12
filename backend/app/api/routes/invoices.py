@@ -15,8 +15,10 @@ from app.services import invoice_service
 from app.schemas.invoice import (
     InvoiceListResponse,
     ApproveRejectRequest,
+    InvoiceMetadataUpdate,
 )
 from app.schemas.extracted_data import ExtractedDataUpdate
+from app.schemas.line_item import LineItemsUpdate
 
 router = APIRouter(prefix="/invoices", tags=["invoices"])
 
@@ -51,6 +53,7 @@ async def get_invoices(
     category: Optional[str] = Query(default=None),
     date_from: Optional[str] = Query(default=None),
     date_to: Optional[str] = Query(default=None),
+    search: Optional[str] = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -64,6 +67,7 @@ async def get_invoices(
         category=category,
         date_from=date_from,
         date_to=date_to,
+        search=search,
     )
 
 
@@ -126,6 +130,60 @@ async def reject_invoice(
     return await invoice_service.reject_invoice(
         invoice_id=invoice_id,
         reason=data.reason,
+        current_user=current_user,
+        db=db,
+        ip_address=ip,
+    )
+
+
+@router.post("/{invoice_id}/re-extract", status_code=202)
+async def re_extract_invoice(
+    invoice_id: uuid.UUID,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ip = request.client.host if request.client else None
+    return await invoice_service.re_extract_invoice(
+        invoice_id=invoice_id,
+        current_user=current_user,
+        db=db,
+        ip_address=ip,
+    )
+
+
+@router.put("/{invoice_id}/line-items")
+async def update_line_items(
+    invoice_id: uuid.UUID,
+    request: Request,
+    data: LineItemsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ip = request.client.host if request.client else None
+    items = [item.model_dump() for item in data.line_items]
+    return await invoice_service.update_line_items(
+        invoice_id=invoice_id,
+        line_items_data=items,
+        current_user=current_user,
+        db=db,
+        ip_address=ip,
+    )
+
+
+@router.patch("/{invoice_id}")
+async def update_invoice_metadata(
+    invoice_id: uuid.UUID,
+    request: Request,
+    data: InvoiceMetadataUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    ip = request.client.host if request.client else None
+    updates = data.model_dump(exclude_unset=True)
+    return await invoice_service.update_invoice_metadata(
+        invoice_id=invoice_id,
+        updates=updates,
         current_user=current_user,
         db=db,
         ip_address=ip,

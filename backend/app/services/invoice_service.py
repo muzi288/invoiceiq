@@ -2,7 +2,7 @@ import uuid
 import math
 from datetime import datetime, timezone
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, and_, func
+from sqlalchemy import select, and_, func, or_, delete
 from fastapi import HTTPException, status, UploadFile
 
 from app.models.invoice import Invoice
@@ -118,6 +118,40 @@ async def upload_invoice(
     }
 
 
+def _invoice_list_filters(
+    tenant_id: uuid.UUID,
+    current_user: User,
+    status_filter: str | None,
+    category: str | None,
+    date_from: str | None,
+    date_to: str | None,
+    search: str | None,
+):
+    conditions = [
+        Invoice.tenant_id == tenant_id,
+        Invoice.deleted_at == None,
+    ]
+    if current_user.role == "staff":
+        conditions.append(Invoice.uploaded_by == current_user.id)
+    if status_filter:
+        conditions.append(Invoice.status == status_filter)
+    if category:
+        conditions.append(Invoice.category == category)
+    if date_from:
+        conditions.append(Invoice.upload_date >= date_from)
+    if date_to:
+        conditions.append(Invoice.upload_date <= date_to)
+    if search:
+        pattern = f"%{search}%"
+        conditions.append(
+            or_(
+                ExtractedData.vendor_name.ilike(pattern),
+                ExtractedData.invoice_number.ilike(pattern),
+            )
+        )
+    return and_(*conditions)
+
+
 async def get_invoices(
     tenant_id: uuid.UUID,
     current_user: User,
@@ -128,50 +162,58 @@ async def get_invoices(
     category: str | None = None,
     date_from: str | None = None,
     date_to: str | None = None,
+    search: str | None = None,
 ) -> dict:
     """
     Get paginated list of invoices for the tenant.
-    Owner sees all invoices.
-    Staff sees only their own uploads.
+    Owner sees all invoices. Staff sees only their own uploads.
+    Joins extracted data and uploader name for dashboard display.
     """
-    query = select(Invoice).where(
-        and_(
-            Invoice.tenant_id == tenant_id,
-            Invoice.deleted_at == None,
-        )
+    filters = _invoice_list_filters(
+        tenant_id, current_user, status_filter, category, date_from, date_to, search
     )
 
-    # Staff can only see their own uploads
-    if current_user.role == "staff":
-        query = query.where(Invoice.uploaded_by == current_user.id)
+    count_query = (
+        select(func.count(func.distinct(Invoice.id)))
+        .select_from(Invoice)
+        .outerjoin(ExtractedData, ExtractedData.invoice_id == Invoice.id)
+        .where(filters)
+    )
+    total = await db.scalar(count_query) or 0
 
-    # Optional filters
-    if status_filter:
-        query = query.where(Invoice.status == status_filter)
-    if category:
-        query = query.where(Invoice.category == category)
-    if date_from:
-        query = query.where(Invoice.upload_date >= date_from)
-    if date_to:
-        query = query.where(Invoice.upload_date <= date_to)
-
-    # Get total count for pagination
-    count_query = select(func.count()).select_from(query.subquery())
-    total = await db.scalar(count_query)
-
-    # Apply pagination
     offset = (page - 1) * limit
-    query = query.order_by(Invoice.upload_date.desc()).offset(offset).limit(limit)
+    query = (
+        select(Invoice, ExtractedData, User.full_name)
+        .outerjoin(ExtractedData, ExtractedData.invoice_id == Invoice.id)
+        .outerjoin(User, User.id == Invoice.uploaded_by)
+        .where(filters)
+        .order_by(Invoice.upload_date.desc())
+        .offset(offset)
+        .limit(limit)
+    )
 
     result = await db.execute(query)
-    invoices = result.scalars().all()
+    rows = result.all()
 
+    items = []
+    for invoice, extracted, uploader_name in rows:
+        item = {
+            **{c.key: getattr(invoice, c.key) for c in invoice.__table__.columns},
+            "vendor_name": extracted.vendor_name if extracted else None,
+            "invoice_number": extracted.invoice_number if extracted else None,
+            "total_amount": extracted.total_amount if extracted else None,
+            "currency": extracted.currency if extracted else None,
+            "uploaded_by_name": uploader_name,
+        }
+        items.append(item)
+
+    pages = math.ceil(total / limit) if limit else 0
     return {
         "total": total,
         "page": page,
         "limit": limit,
-        "pages": math.ceil(total / limit),
-        "items": invoices,
+        "pages": pages,
+        "items": items,
     }
 
 
@@ -393,6 +435,132 @@ async def update_extracted_data(
     )
 
     return extracted
+
+
+async def update_line_items(
+    invoice_id: uuid.UUID,
+    line_items_data: list[dict],
+    current_user: User,
+    db: AsyncSession,
+    ip_address: str | None = None,
+) -> list[LineItem]:
+    """Replace all line items for an invoice."""
+    invoice = await _get_invoice_or_404(invoice_id, current_user, db)
+
+    if invoice.status != "pending_review":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Line items can only be edited while invoice is pending review"
+        )
+
+    await db.execute(delete(LineItem).where(LineItem.invoice_id == invoice_id))
+
+    new_items = []
+    for index, item in enumerate(line_items_data):
+        line_item = LineItem(
+            id=uuid.uuid4(),
+            invoice_id=invoice_id,
+            description=item.get("description"),
+            quantity=item.get("quantity"),
+            unit_price=item.get("unit_price"),
+            total_price=item.get("total_price"),
+            currency=item.get("currency") or "USD",
+            sort_order=index,
+        )
+        db.add(line_item)
+        new_items.append(line_item)
+
+    await log_action(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        action="line_items_edited",
+        invoice_id=invoice_id,
+        ip_address=ip_address,
+        extra_data={"line_item_count": len(new_items)},
+    )
+
+    return new_items
+
+
+async def re_extract_invoice(
+    invoice_id: uuid.UUID,
+    current_user: User,
+    db: AsyncSession,
+    ip_address: str | None = None,
+) -> dict:
+    """Clear existing extraction and re-run the AI pipeline."""
+    invoice = await _get_invoice_or_404(invoice_id, current_user, db)
+
+    if invoice.status == "approved":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Cannot re-extract an approved invoice"
+        )
+
+    if invoice.extraction_status in ("pending", "processing"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Extraction is already in progress"
+        )
+
+    await db.execute(delete(LineItem).where(LineItem.invoice_id == invoice_id))
+    await db.execute(delete(ExtractedData).where(ExtractedData.invoice_id == invoice_id))
+
+    invoice.extraction_status = "pending"
+    invoice.extraction_error = None
+    invoice.status = "pending_review"
+    invoice.processed_at = None
+    await db.flush()
+
+    await log_action(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        action="re_extract_requested",
+        invoice_id=invoice_id,
+        ip_address=ip_address,
+    )
+
+    from app.workers.tasks import extract_invoice_task
+    extract_invoice_task.delay(str(invoice_id))
+
+    return {
+        "invoice_id": str(invoice_id),
+        "extraction_status": "pending",
+        "message": "Re-extraction started",
+    }
+
+
+async def update_invoice_metadata(
+    invoice_id: uuid.UUID,
+    updates: dict,
+    current_user: User,
+    db: AsyncSession,
+    ip_address: str | None = None,
+) -> Invoice:
+    """Update invoice category, tags, or payment fields."""
+    invoice = await _get_invoice_or_404(invoice_id, current_user, db)
+
+    changes = {}
+    for field, new_value in updates.items():
+        old_value = getattr(invoice, field, None)
+        if old_value != new_value:
+            changes[field] = {"old": str(old_value), "new": str(new_value)}
+            setattr(invoice, field, new_value)
+
+    if changes:
+        await log_action(
+            db=db,
+            tenant_id=current_user.tenant_id,
+            user_id=current_user.id,
+            action="invoice_metadata_edited",
+            invoice_id=invoice_id,
+            ip_address=ip_address,
+            extra_data={"changes": changes},
+        )
+
+    return invoice
 
 
 async def delete_invoice(

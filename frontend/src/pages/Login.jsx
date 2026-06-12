@@ -26,6 +26,7 @@ export default function Login() {
         role: payload.role,
         can_approve: payload.can_approve,
         can_export: payload.can_export,
+        email: form.email,
       })
       navigate('/dashboard')
     } catch (err) {

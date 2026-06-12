@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from typing import Optional
@@ -10,12 +10,14 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_exporter
 from app.models.user import User
 from app.services import invoice_service
+from app.services.audit_service import log_action
 
 router = APIRouter(prefix="/exports", tags=["exports"])
 
 
 @router.get("/invoices")
 async def export_invoices(
+    request: Request,
     date_from: Optional[str] = Query(default=None),
     date_to: Optional[str] = Query(default=None),
     category: Optional[str] = Query(default=None),
@@ -39,26 +41,36 @@ async def export_invoices(
     writer = csv.writer(output)
 
     writer.writerow([
-        "Invoice ID", "Vendor", "Invoice Number", "Date",
-        "Due Date", "Total", "Currency", "Category",
-        "Uploaded By", "Upload Date", "Payment Status"
+        "Invoice ID", "Vendor", "Invoice Number", "Total", "Currency",
+        "Category", "Uploaded By", "Upload Date", "Payment Status"
     ])
 
     for inv in invoices:
-        ed = getattr(inv, "extracted_data", None)
         writer.writerow([
-            str(inv.id),
-            ed.vendor_name if ed else "",
-            ed.invoice_number if ed else "",
-            ed.invoice_date if ed else "",
-            ed.due_date if ed else "",
-            ed.total_amount if ed else "",
-            ed.currency if ed else "",
-            inv.category,
-            str(inv.uploaded_by),
-            inv.upload_date.strftime("%Y-%m-%d"),
-            inv.payment_status,
+            str(inv["id"]),
+            inv.get("vendor_name") or "",
+            inv.get("invoice_number") or "",
+            inv.get("total_amount") or "",
+            inv.get("currency") or "",
+            inv.get("category") or "",
+            inv.get("uploaded_by_name") or "",
+            inv["upload_date"].strftime("%Y-%m-%d") if inv.get("upload_date") else "",
+            inv.get("payment_status") or "unpaid",
         ])
+
+    await log_action(
+        db=db,
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        action="exported",
+        ip_address=request.client.host if request.client else None,
+        extra_data={
+            "row_count": len(invoices),
+            "category": category,
+            "date_from": date_from,
+            "date_to": date_to,
+        },
+    )
 
     output.seek(0)
     filename = f"invoices_{datetime.now().strftime('%Y%m%d')}.csv"

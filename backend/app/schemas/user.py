@@ -14,6 +14,10 @@ class UpdatePermissionsRequest(BaseModel):
     can_export: bool | None = None
 
 
+class UserListResponse(BaseModel):
+    items: list["UserResponse"]
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID

@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.core.config import settings
-from app.api.routes import auth, invoices, users, audit, settings as settings_router, exports
+from app.api.routes import auth, invoices, users, audit, settings as settings_router, exports, vendors
 
 app = FastAPI(
     title="InvoiceIQ",
@@ -25,6 +25,7 @@ app.include_router(users.router)
 app.include_router(audit.router)
 app.include_router(settings_router.router)
 app.include_router(exports.router)
+app.include_router(vendors.router)
 
 
 @app.get("/health")

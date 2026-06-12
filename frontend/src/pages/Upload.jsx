@@ -7,6 +7,7 @@ import Layout from '../components/Layout'
 export default function Upload() {
   const [file, setFile] = useState(null)
   const [category, setCategory] = useState('uncategorised')
+  const [tags, setTags] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const navigate = useNavigate()
@@ -38,7 +39,7 @@ export default function Upload() {
       const formData = new FormData()
       formData.append('file', file)
       formData.append('category', category)
-      formData.append('tags', '')
+      formData.append('tags', tags)
 
       const res = await uploadInvoice(formData)
       navigate(`/invoices/${res.data.invoice_id}`)
@@ -91,6 +92,17 @@ export default function Upload() {
                 </p>
               </div>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Tags</label>
+            <input
+              type="text"
+              value={tags}
+              onChange={(e) => setTags(e.target.value)}
+              placeholder="e.g. urgent, Q1, project-alpha (comma separated)"
+              className="w-full bg-gray-900 border border-gray-700 text-white px-3 py-2 rounded text-sm focus:outline-none focus:border-amber-500"
+            />
           </div>
 
           <div>

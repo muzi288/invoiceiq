@@ -2,8 +2,9 @@
 
 ## Table of Contents
 1. [Resolved Fixes](#resolved-fixes)
-2. [Known Issues](#known-issues)
-3. [Technical Debt](#technical-debt)
+2. [Product Upgrades](#product-upgrades)
+3. [Known Issues](#known-issues)
+4. [Technical Debt](#technical-debt)
 
 ---
 
@@ -71,5 +72,30 @@
 **Files:** `backend/app/api/routes/invoices.py`, `backend/app/services/invoice_service.py`, `backend/app/services/storage_service.py`, `frontend/src/pages/InvoiceDetail.jsx`, `frontend/src/services/api.js`
 
 **Verification:** Open any completed invoice on the detail page. The original document should appear on the left; extracted data and line items on the right. Check Network tab for `GET /invoices/{id}/file` returning `200` with the correct `Content-Type` (`application/pdf`, `image/jpeg`, or `image/png`).
+
+---
+
+## Product Upgrades
+
+See **[product-upgrades.md](./product-upgrades.md)** for the full SaaS Phase 1 changelog covering:
+
+- Dashboard vendor names, totals, search, and category filters
+- Line item editing and re-extraction
+- Enriched audit log with user names and invoice links
+- Vendor profiles UI
+- Team, Settings, and Export pages
+- Upload tags support
+
+---
+
+## Known Issues
+
+_(None documented yet — add items here as they are discovered.)_
+
+---
+
+## Technical Debt
+
+_(See product-upgrades.md "Still Out of Scope" for planned Phase 2 work.)_
 
 

@@ -12,9 +12,27 @@ from app.schemas.user import (
     InviteUserRequest,
     UpdatePermissionsRequest,
     UserResponse,
+    UserListResponse,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("", response_model=UserListResponse)
+async def list_users(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_owner),
+):
+    result = await db.execute(
+        select(User)
+        .where(
+            User.tenant_id == current_user.tenant_id,
+            User.is_active == True,
+        )
+        .order_by(User.created_at)
+    )
+    users = result.scalars().all()
+    return {"items": users}
 
 
 @router.post("/invite", response_model=UserResponse, status_code=201)

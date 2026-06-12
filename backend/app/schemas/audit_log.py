@@ -12,6 +12,9 @@ class AuditLogResponse(BaseModel):
     extra_data: dict
     ip_address: str | None
     created_at: datetime
+    user_name: str | None = None
+    user_role: str | None = None
+    invoice_label: str | None = None
 
     model_config = {"from_attributes": True}
 

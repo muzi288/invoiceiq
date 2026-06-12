@@ -7,7 +7,6 @@ const api = axios.create({
   },
 })
 
-// Attach JWT token to every request
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('token')
   if (token) {
@@ -16,7 +15,6 @@ api.interceptors.request.use((config) => {
   return config
 })
 
-// Redirect to login on 401
 api.interceptors.response.use(
   (response) => response,
   (error) => {
@@ -44,6 +42,21 @@ export const uploadInvoice = (formData) => api.post('/invoices/upload', formData
 export const approveInvoice = (id) => api.patch(`/invoices/${id}/approve`)
 export const rejectInvoice = (id, reason) => api.patch(`/invoices/${id}/reject`, { reason })
 export const updateExtracted = (id, data) => api.patch(`/invoices/${id}/extracted`, data)
+export const updateLineItems = (id, line_items) => api.put(`/invoices/${id}/line-items`, { line_items })
+export const reExtractInvoice = (id) => api.post(`/invoices/${id}/re-extract`)
+export const updateInvoice = (id, data) => api.patch(`/invoices/${id}`, data)
+export const deleteInvoice = (id) => api.delete(`/invoices/${id}`)
+
+// Vendors
+export const getVendors = () => api.get('/vendors')
+export const getVendor = (id) => api.get(`/vendors/${id}`)
+
+// Users / Team
+export const getMe = () => api.get('/users/me')
+export const getUsers = () => api.get('/users')
+export const inviteUser = (data) => api.post('/users/invite', data)
+export const updateUserPermissions = (userId, data) => api.patch(`/users/${userId}/permissions`, data)
+export const deactivateUser = (userId) => api.delete(`/users/${userId}`)
 
 // Audit
 export const getAuditLog = (params) => api.get('/audit', { params })
@@ -51,5 +64,11 @@ export const getAuditLog = (params) => api.get('/audit', { params })
 // Settings
 export const getSettings = () => api.get('/settings')
 export const updateSettings = (data) => api.patch('/settings', data)
+
+// Export
+export const exportInvoices = (params) => api.get('/exports/invoices', {
+  params,
+  responseType: 'blob',
+})
 
 export default api

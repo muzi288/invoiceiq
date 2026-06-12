@@ -231,6 +231,7 @@ async def update_vendor_profile(
         profile.total_spend += total_amount
         profile.average_invoice = profile.total_spend / profile.total_invoices
         profile.last_invoice_date = datetime.now(timezone.utc).date()
+        profile.is_recurring_vendor = profile.total_invoices >= 3
     else:
         profile = VendorProfile(
             id=uuid.uuid4(),
