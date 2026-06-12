@@ -1,7 +1,7 @@
 import json
 import uuid
-import base64
-from datetime import datetime, timezone
+import asyncio
+from datetime import datetime, timezone, date
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
@@ -12,86 +12,59 @@ from app.models.line_item import LineItem
 from app.models.vendor_profile import VendorProfile
 from app.services.audit_service import log_action
 
-# ── MODEL ROUTING ─────────────────────────────────────────────────
-# Switch EXTRACTION_PROVIDER in .env to change provider
-# gemini      → Google Gemini 3.5 Flash (free, 30 RPM)
-# openrouter  → Llama 4 Maverick free tier (200 req/day fallback)
-# anthropic   → Claude Haiku 4.5 (paid, $0.25/M tokens, production)
-
-PROVIDERS = {
-    "gemini": {
-        "model": "gemini-3.5-flash",
-        "cost": "free",
-        "vision": True,
-        "pdf_native": True,
-    },
-    "openrouter_llama": {
-        "model": "meta-llama/llama-4-maverick:free",
-        "cost": "free",
-        "vision": True,
-        "pdf_native": False,
-    },
-    "openrouter_qwen": {
-        "model": "qwen/qwen2.5-vl-72b-instruct:free",
-        "cost": "free",
-        "vision": True,
-        "pdf_native": False,
-    },
-    "anthropic": {
-        "model": "claude-haiku-4-5",
-        "cost": "$0.25/M tokens",
-        "vision": True,
-        "pdf_native": True,
-    },
-}
-
 EXTRACTION_SYSTEM_PROMPT = """You are a financial document extraction specialist.
 Extract all available fields from this invoice or receipt document.
-Return ONLY a valid JSON object. No preamble, no explanation, no markdown.
-Raw JSON only.
+Follow the JSON schema rigidly. Missing fields must use null."""
 
-Use this exact schema:
-{
-  "vendor_name": "string or null",
-  "invoice_number": "string or null",
-  "invoice_date": "YYYY-MM-DD or null",
-  "due_date": "YYYY-MM-DD or null",
-  "subtotal": number or null,
-  "tax_amount": number or null,
-  "total_amount": number or null,
-  "currency": "3-letter ISO code e.g. USD ZAR ZWL or null",
-  "payment_terms": "string or null",
-  "notes": "string or null",
-  "is_multi_currency": boolean,
-  "is_recurring": boolean,
-  "confidence_score": number between 0.0 and 1.0,
-  "line_items": [
-    {
-      "description": "string or null",
-      "quantity": number or null,
-      "unit_price": number or null,
-      "total_price": number or null,
-      "currency": "string or null"
-    }
-  ]
+GEMINI_RESPONSE_SCHEMA = {
+    "type": "OBJECT",
+    "properties": {
+        "vendor_name": {"type": "STRING"},
+        "invoice_number": {"type": "STRING"},
+        "invoice_date": {"type": "STRING", "description": "YYYY-MM-DD"},
+        "due_date": {"type": "STRING", "description": "YYYY-MM-DD"},
+        "subtotal": {"type": "NUMBER"},
+        "tax_amount": {"type": "NUMBER"},
+        "total_amount": {"type": "NUMBER"},
+        "currency": {"type": "STRING", "description": "3-letter ISO code e.g. USD, ZAR"},
+        "payment_terms": {"type": "STRING"},
+        "notes": {"type": "STRING"},
+        "is_multi_currency": {"type": "BOOLEAN"},
+        "is_recurring": {"type": "BOOLEAN"},
+        "confidence_score": {"type": "NUMBER", "description": "0.0 to 1.0"},
+        "line_items": {
+            "type": "ARRAY",
+            "items": {
+                "type": "OBJECT",
+                "properties": {
+                    "description": {"type": "STRING"},
+                    "quantity": {"type": "NUMBER"},
+                    "unit_price": {"type": "NUMBER"},
+                    "total_price": {"type": "NUMBER"},
+                    "currency": {"type": "STRING"}
+                }
+            }
+        }
+    },
+    "required": ["is_multi_currency", "is_recurring", "confidence_score"]
 }
 
-Rules:
-- Missing fields use null
-- Dates in YYYY-MM-DD format
-- Amounts are numbers not strings
-- is_multi_currency true if line items have different currencies
-- is_recurring true if this looks like a subscription or recurring charge
-- confidence_score reflects overall extraction confidence
-- Preserve original line item order"""
-
-
-async def call_gemini(file_contents: bytes, file_type: str) -> str:
-    """Call Google Gemini API for extraction."""
+async def call_gemini_async(file_contents: bytes, file_type: str) -> str:
+    """Call Google Gemini API asynchronously with Quota Rate Limit Backoff."""
+    import base64
     import google.generativeai as genai
+    from google.api_core.exceptions import ResourceExhausted
 
     genai.configure(api_key=settings.GEMINI_API_KEY)
-    model = genai.GenerativeModel("gemini-3.5-flash")
+    
+    model = genai.GenerativeModel(
+        "gemini-2.5-flash-lite",
+        generation_config={
+            "response_mime_type": "application/json",
+            "response_schema": GEMINI_RESPONSE_SCHEMA
+        },
+        system_instruction=EXTRACTION_SYSTEM_PROMPT
+    )
 
     mime_map = {
         "pdf":  "application/pdf",
@@ -99,179 +72,34 @@ async def call_gemini(file_contents: bytes, file_type: str) -> str:
         "png":  "image/png",
     }
     mime_type = mime_map.get(file_type, "application/pdf")
-
-    response = model.generate_content([
-        {"mime_type": mime_type, "data": file_contents},
-        EXTRACTION_SYSTEM_PROMPT
-    ])
-
-    return response.text
-
-
-async def call_openrouter(
-    file_contents: bytes,
-    file_type: str,
-    model: str,
-) -> str:
-    """Call OpenRouter API for extraction (OpenAI-compatible)."""
-    import httpx
-
     file_b64 = base64.standard_b64encode(file_contents).decode("utf-8")
 
-    mime_map = {
-        "pdf":  "application/pdf",
-        "jpeg": "image/jpeg",
-        "png":  "image/png",
-    }
-    mime_type = mime_map.get(file_type, "image/jpeg")
+    max_retries = 3
+    base_delay = 15 
 
-    payload = {
-        "model": model,
-        "messages": [
-            {
-                "role": "system",
-                "content": EXTRACTION_SYSTEM_PROMPT,
-            },
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "image_url",
-                        "image_url": {
-                            "url": f"data:{mime_type};base64,{file_b64}"
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Extract all invoice data and return as JSON."
-                    }
-                ],
-            }
-        ],
-        "response_format": {"type": "json_object"},
-    }
-
-    async with httpx.AsyncClient() as client:
-        response = await client.post(
-            "https://openrouter.ai/api/v1/chat/completions",
-            headers={
-                "Authorization": f"Bearer {settings.OPENROUTER_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-            timeout=60.0,
-        )
-        response.raise_for_status()
-        data = response.json()
-        return data["choices"][0]["message"]["content"]
-
-
-async def call_anthropic(file_contents: bytes, file_type: str) -> str:
-    """Call Anthropic Claude API for extraction."""
-    from anthropic import Anthropic
-
-    client = Anthropic(api_key=settings.ANTHROPIC_API_KEY)
-
-    mime_map = {
-        "pdf":  "application/pdf",
-        "jpeg": "image/jpeg",
-        "png":  "image/png",
-    }
-    media_type = mime_map.get(file_type, "application/pdf")
-    file_b64 = base64.standard_b64encode(file_contents).decode("utf-8")
-
-    response = client.messages.create(
-        model="claude-haiku-4-5",
-        max_tokens=2000,
-        system=[
-            {
-                "type": "text",
-                "text": EXTRACTION_SYSTEM_PROMPT,
-                "cache_control": {"type": "ephemeral"},
-            }
-        ],
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {
-                        "type": "document" if media_type == "application/pdf" else "image",
-                        "source": {
-                            "type": "base64",
-                            "media_type": media_type,
-                            "data": file_b64,
-                        },
-                    },
-                    {
-                        "type": "text",
-                        "text": "Extract all invoice data and return as JSON."
-                    }
-                ],
-            }
-        ],
-    )
-    return response.content[0].text
-
-
-async def run_extraction(
-    file_contents: bytes,
-    file_type: str,
-    provider: str = None,
-) -> dict:
-    """
-    Route extraction to the configured provider.
-    Falls back through providers if one fails.
-    Provider order: gemini → openrouter_llama → openrouter_qwen → anthropic
-    """
-    provider = provider or settings.EXTRACTION_PROVIDER
-
-    fallback_order = [
-        "gemini",
-        "openrouter_llama",
-        "openrouter_qwen",
-        "anthropic",
-    ]
-
-    # Start from configured provider
-    start_index = fallback_order.index(provider) if provider in fallback_order else 0
-    providers_to_try = fallback_order[start_index:]
-
-    last_error = None
-
-    for p in providers_to_try:
+    for attempt in range(max_retries):
         try:
-            if p == "gemini":
-                raw = await call_gemini(file_contents, file_type)
-            elif p == "openrouter_llama":
-                raw = await call_openrouter(
-                    file_contents, file_type,
-                    "meta-llama/llama-4-maverick:free"
-                )
-            elif p == "openrouter_qwen":
-                raw = await call_openrouter(
-                    file_contents, file_type,
-                    "qwen/qwen2.5-vl-72b-instruct:free"
-                )
-            elif p == "anthropic":
-                raw = await call_anthropic(file_contents, file_type)
+            # We wrap the synchronous network call using asyncio.to_thread
+            # This is safe, lightweight, and works seamlessly inside Celery tasks
+            response = await asyncio.to_thread(
+                model.generate_content,
+                [{
+                    "inline_data": {
+                        "mime_type": mime_type,
+                        "data": file_b64,
+                    }
+                }]
+            )
+            
+            await asyncio.sleep(base_delay)
+            return response.text
 
-            # Strip markdown if model wrapped response in code blocks
-            clean = raw.strip()
-            if clean.startswith("```"):
-                clean = clean.split("```")[1]
-                if clean.startswith("json"):
-                    clean = clean[4:]
-            clean = clean.strip()
-
-            extracted = json.loads(clean)
-            extracted["_provider_used"] = p
-            return extracted
-
-        except Exception as e:
-            last_error = e
-            continue
-
-    raise Exception(f"All providers failed. Last error: {last_error}")
+        except ResourceExhausted as e:
+            if attempt == max_retries - 1:
+                raise e
+            wait_time = base_delay * (2 ** attempt)
+            print(f"[extraction] 429 Quota Exceeded. Sleeping for {wait_time}s...")
+            await asyncio.sleep(wait_time)
 
 
 async def extract_invoice(
@@ -280,10 +108,7 @@ async def extract_invoice(
     file_type: str,
     db: AsyncSession,
 ) -> None:
-    """
-    Main extraction function called by Celery worker.
-    Handles the full lifecycle: status updates, saving results, audit log.
-    """
+    """Core extraction workflow — fully asynchronous."""
     result = await db.execute(
         select(Invoice).where(Invoice.id == invoice_id)
     )
@@ -292,19 +117,32 @@ async def extract_invoice(
     if not invoice:
         return
 
-    invoice.extraction_status = "processing"
-    await db.flush()
-
+    # Status update was handled cleanly inside the task wrapper, 
+    # so we proceed directly to the API execution.
     try:
-        extracted = await run_extraction(file_contents, file_type)
+        print("[extraction] calling gemini pipeline...")
+        raw_json_str = await call_gemini_async(file_contents, file_type)
+        extracted = json.loads(raw_json_str)
+        extracted["_provider_used"] = "gemini"
 
+        from datetime import date
+
+        def _parse_date(val):
+            if val and isinstance(val, str):
+                try:
+                    return date.fromisoformat(val)
+                except ValueError:
+                    return None
+            return val
+
+        # Map details into the DB model
         extracted_data = ExtractedData(
             id=uuid.uuid4(),
             invoice_id=invoice_id,
             vendor_name=extracted.get("vendor_name"),
             invoice_number=extracted.get("invoice_number"),
-            invoice_date=extracted.get("invoice_date"),
-            due_date=extracted.get("due_date"),
+            invoice_date=_parse_date(extracted.get("invoice_date")),
+            due_date=_parse_date(extracted.get("due_date")),
             subtotal=extracted.get("subtotal"),
             tax_amount=extracted.get("tax_amount"),
             total_amount=extracted.get("total_amount"),
@@ -356,6 +194,7 @@ async def extract_invoice(
         )
 
     except Exception as e:
+        print(f"[extraction] pipeline failure occurred: {e}")
         invoice.extraction_status = "failed"
         invoice.extraction_error = str(e)
         invoice.retry_count += 1
@@ -367,6 +206,7 @@ async def extract_invoice(
             invoice_id=invoice_id,
             extra_data={"error": str(e)}
         )
+        raise e
 
 
 async def update_vendor_profile(

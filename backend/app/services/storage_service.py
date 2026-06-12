@@ -4,6 +4,7 @@ from datetime import datetime, timedelta, timezone
 from azure.storage.blob import (
     BlobServiceClient,
     BlobSasPermissions,
+    ContentSettings,
     generate_blob_sas,
 )
 from fastapi import HTTPException, status
@@ -63,10 +64,12 @@ async def upload_file(
         settings.AZURE_STORAGE_CONTAINER_NAME
     )
 
+    from azure.storage.blob import ContentSettings
+
     container.upload_blob(
         name=file_path,
         data=contents,
-        content_settings={"content_type": content_type},
+        content_settings=ContentSettings(content_type=content_type),
         overwrite=False,
     )
 
@@ -95,4 +98,3 @@ def generate_signed_url(file_path: str) -> str:
         f"https://{account_name}.blob.core.windows.net/"
         f"{settings.AZURE_STORAGE_CONTAINER_NAME}/{file_path}?{sas_token}"
     )
-    
