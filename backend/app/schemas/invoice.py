@@ -37,6 +37,9 @@ class InvoiceListItemResponse(InvoiceResponse):
     invoice_number: str | None = None
     total_amount: Decimal | None = None
     currency: str | None = None
+    display_amount: Decimal | None = None
+    display_currency: str | None = None
+    amount_converted: bool = False
     uploaded_by_name: str | None = None
 
 
@@ -45,6 +48,7 @@ class InvoiceListResponse(BaseModel):
     page: int
     limit: int
     pages: int
+    tenant_currency: str
     items: list[InvoiceListItemResponse]
 
 

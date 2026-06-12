@@ -27,6 +27,7 @@ export default function Layout({ children }) {
               {canExport && <Link to="/export" className={linkClass}>Export</Link>}
               {isOwner && <Link to="/team" className={linkClass}>Team</Link>}
               {isOwner && <Link to="/audit" className={linkClass}>Audit</Link>}
+              <Link to="/profile" className={linkClass}>Profile</Link>
               <Link to="/settings" className={linkClass}>Settings</Link>
             </div>
           </div>

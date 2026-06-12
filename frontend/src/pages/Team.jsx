@@ -67,7 +67,7 @@ export default function Team() {
             onChange={(e) => setInviteForm({ ...inviteForm, full_name: e.target.value })}
             className="w-full bg-gray-800 border border-gray-700 text-white px-3 py-2 rounded text-sm"
           />
-          <p className="text-gray-500 text-xs">Temporary password: ChangeMe123!</p>
+          <p className="text-gray-500 text-xs">An invite email will be sent with login credentials.</p>
           <div className="flex gap-2">
             <button
               onClick={() => inviteMutation.mutate(inviteForm)}

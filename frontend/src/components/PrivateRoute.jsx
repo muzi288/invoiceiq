@@ -1,7 +1,16 @@
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import useAuthStore from '../store/authStore'
 
 export default function PrivateRoute({ children }) {
   const token = useAuthStore((state) => state.token)
-  return token ? children : <Navigate to="/login" replace />
+  const user = useAuthStore((state) => state.user)
+  const location = useLocation()
+
+  if (!token) return <Navigate to="/login" replace />
+
+  if (user?.must_change_password && !location.pathname.startsWith('/profile')) {
+    return <Navigate to="/profile?setup=1" replace />
+  }
+
+  return children
 }

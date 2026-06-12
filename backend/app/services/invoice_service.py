@@ -9,7 +9,9 @@ from app.models.invoice import Invoice
 from app.models.extracted_data import ExtractedData
 from app.models.line_item import LineItem
 from app.models.user import User
+from app.models.tenant_settings import TenantSettings
 from app.services.audit_service import log_action
+from app.services.currency_service import display_amount_for_invoice, prefetch_rates
 from app.services.storage_service import upload_file, generate_signed_url, download_file
 
 
@@ -195,15 +197,51 @@ async def get_invoices(
     result = await db.execute(query)
     rows = result.all()
 
+    settings_result = await db.execute(
+        select(TenantSettings).where(TenantSettings.tenant_id == tenant_id)
+    )
+    tenant_settings = settings_result.scalar_one_or_none()
+    tenant_currency = (
+        tenant_settings.default_currency if tenant_settings else "USD"
+    )
+
+    source_currencies = {
+        extracted.currency
+        for _, extracted, _ in rows
+        if extracted and extracted.currency
+    }
+    rate_dates = {
+        extracted.invoice_date
+        for _, extracted, _ in rows
+        if extracted and extracted.invoice_date
+    }
+    rate_dates |= {
+        invoice.upload_date.date()
+        for invoice, extracted, _ in rows
+        if invoice.upload_date and extracted and not extracted.invoice_date
+    }
+    await prefetch_rates(source_currencies, tenant_currency, rate_dates)
+
     items = []
     for invoice, extracted, uploader_name in rows:
+        original_amount = extracted.total_amount if extracted else None
+        original_currency = extracted.currency if extracted else None
+        display_fields = await display_amount_for_invoice(
+            original_amount,
+            original_currency,
+            tenant_currency,
+            invoice_date=extracted.invoice_date if extracted else None,
+            fallback_date=invoice.upload_date,
+        )
+
         item = {
             **{c.key: getattr(invoice, c.key) for c in invoice.__table__.columns},
             "vendor_name": extracted.vendor_name if extracted else None,
             "invoice_number": extracted.invoice_number if extracted else None,
-            "total_amount": extracted.total_amount if extracted else None,
-            "currency": extracted.currency if extracted else None,
+            "total_amount": original_amount,
+            "currency": original_currency,
             "uploaded_by_name": uploader_name,
+            **display_fields,
         }
         items.append(item)
 
@@ -213,6 +251,7 @@ async def get_invoices(
         "page": page,
         "limit": limit,
         "pages": pages,
+        "tenant_currency": tenant_currency,
         "items": items,
     }
 

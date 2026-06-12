@@ -20,6 +20,7 @@ export default function Login() {
 
       // Decode JWT to get user info
       const payload = JSON.parse(atob(token.split('.')[1]))
+      const mustChange = res.data.must_change_password || payload.must_change_password
       setAuth(token, {
         user_id: payload.user_id,
         tenant_id: payload.tenant_id,
@@ -27,8 +28,9 @@ export default function Login() {
         can_approve: payload.can_approve,
         can_export: payload.can_export,
         email: form.email,
+        must_change_password: !!mustChange,
       })
-      navigate('/dashboard')
+      navigate(mustChange ? '/profile?setup=1' : '/dashboard')
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed')
     } finally {

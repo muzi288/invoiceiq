@@ -11,6 +11,7 @@ import Team from './pages/Team'
 import Vendors from './pages/Vendors'
 import VendorDetail from './pages/VendorDetail'
 import Export from './pages/Export'
+import Profile from './pages/Profile'
 
 function OwnerRoute({ children }) {
   const user = JSON.parse(localStorage.getItem('user') || 'null')
@@ -31,6 +32,7 @@ export default function App() {
       <Route path="/vendors/:id" element={<PrivateRoute><VendorDetail /></PrivateRoute>} />
       <Route path="/export" element={<PrivateRoute><Export /></PrivateRoute>} />
       <Route path="/settings" element={<PrivateRoute><Settings /></PrivateRoute>} />
+      <Route path="/profile" element={<PrivateRoute><Profile /></PrivateRoute>} />
       <Route path="/audit" element={<PrivateRoute><OwnerRoute><Audit /></OwnerRoute></PrivateRoute>} />
       <Route path="/team" element={<PrivateRoute><OwnerRoute><Team /></OwnerRoute></PrivateRoute>} />
     </Routes>

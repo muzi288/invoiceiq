@@ -16,6 +16,9 @@ export default function Vendors() {
         <h1 className="text-2xl font-bold text-white">Vendors</h1>
         <p className="text-gray-400 text-sm mt-1">
           {data?.total ?? 0} vendors tracked
+          {data?.tenant_currency && (
+            <span> · amounts in {data.tenant_currency}</span>
+          )}
         </p>
       </div>
 
@@ -45,10 +48,12 @@ export default function Vendors() {
               </div>
               <div className="text-right">
                 <p className="text-white font-medium">
-                  {Number(vendor.total_spend).toLocaleString()}
+                  {vendor.display_currency} {Number(vendor.display_total_spend ?? 0).toLocaleString()}
                 </p>
                 <p className="text-gray-500 text-xs">
-                  avg {vendor.average_invoice ? Number(vendor.average_invoice).toLocaleString() : '—'}
+                  avg {vendor.display_average_invoice != null
+                    ? `${vendor.display_currency} ${Number(vendor.display_average_invoice).toLocaleString()}`
+                    : '—'}
                 </p>
               </div>
             </div>

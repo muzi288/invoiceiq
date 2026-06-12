@@ -175,11 +175,21 @@ This document records the Phase 1 SaaS upgrades: dashboard UX, editing workflows
 
 ---
 
-## Still Out of Scope (Phase 2+)
+## Phase 2
 
-- Email delivery for invites and notifications (`notify_on_*` stored but not sent)
+See **[phase-2.md](./phase-2.md)** — email notifications, staff invite emails, password change, forced first-login password update.
+
+### Tenant currency reporting
+
+See **[currency-reporting.md](./currency-reporting.md)** — dashboard and vendor totals in tenant default currency, FX via invoice issue date, originals on invoice detail only.
+
+---
+
+## Still Out of Scope (Phase 2B+)
+
+- Email verification and forgot-password flows
 - Stripe/billing and plan enforcement
-- Password change / email verification flow
+- Payment-date FX reconciliation when marking invoices paid
 - PostgreSQL RLS policies in migrations
 - Custom tenant-defined categories
 - Automated tests

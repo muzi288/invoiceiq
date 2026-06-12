@@ -51,6 +51,9 @@ export default function Dashboard() {
           <h1 className="text-2xl font-bold text-white">Invoices</h1>
           <p className="text-gray-400 text-sm mt-1">
             {data?.total ?? 0} total invoices
+            {data?.tenant_currency && (
+              <span> · amounts in {data.tenant_currency}</span>
+            )}
           </p>
         </div>
         <Link
@@ -166,10 +169,13 @@ export default function Dashboard() {
                 </p>
               </div>
               <div className="text-right shrink-0">
-                {invoice.total_amount != null && (
+                {invoice.display_amount != null && (
                   <p className="text-white font-medium text-sm">
-                    {invoice.currency} {Number(invoice.total_amount).toLocaleString()}
+                    {invoice.display_currency} {Number(invoice.display_amount).toLocaleString()}
                   </p>
+                )}
+                {invoice.amount_converted && (
+                  <p className="text-gray-600 text-xs">converted</p>
                 )}
                 <p className="text-xs text-gray-500 mt-1">
                   {new Date(invoice.upload_date).toLocaleDateString()}

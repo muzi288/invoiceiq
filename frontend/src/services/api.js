@@ -31,6 +31,7 @@ api.interceptors.response.use(
 export const register = (data) => api.post('/auth/register', data)
 export const login = (data) => api.post('/auth/login', data)
 export const logout = () => api.post('/auth/logout')
+export const changePassword = (data) => api.post('/auth/change-password', data)
 
 // Invoices
 export const getInvoices = (params) => api.get('/invoices', { params })

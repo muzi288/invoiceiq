@@ -28,6 +28,7 @@ class UserResponse(BaseModel):
     can_export: bool
     email_verified: bool
     is_active: bool
+    must_change_password: bool
     created_at: datetime
 
     model_config = {"from_attributes": True}

@@ -10,7 +10,15 @@ from app.models.invoice import Invoice
 from app.models.extracted_data import ExtractedData
 from app.models.line_item import LineItem
 from app.models.vendor_profile import VendorProfile
+from app.models.tenant import Tenant
+from app.models.tenant_settings import TenantSettings
+from app.models.user import User
 from app.services.audit_service import log_action
+from app.services.notification_service import (
+    notify_extraction_complete,
+    notify_extraction_failed,
+    notify_approval_needed,
+)
 
 EXTRACTION_SYSTEM_PROMPT = """You are a financial document extraction specialist.
 Extract all available fields from this invoice or receipt document.
@@ -193,6 +201,8 @@ async def extract_invoice(
             }
         )
 
+        await _send_extraction_notifications(db, invoice, success=True, extracted=extracted)
+
     except Exception as e:
         print(f"[extraction] pipeline failure occurred: {e}")
         invoice.extraction_status = "failed"
@@ -206,7 +216,53 @@ async def extract_invoice(
             invoice_id=invoice_id,
             extra_data={"error": str(e)}
         )
+
+        await _send_extraction_notifications(db, invoice, success=False, error=str(e))
         raise e
+
+
+async def _send_extraction_notifications(
+    db: AsyncSession,
+    invoice: Invoice,
+    success: bool,
+    extracted: dict | None = None,
+    error: str | None = None,
+) -> None:
+    settings_result = await db.execute(
+        select(TenantSettings).where(TenantSettings.tenant_id == invoice.tenant_id)
+    )
+    tenant_settings = settings_result.scalar_one_or_none()
+
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == invoice.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
+
+    vendor = extracted.get("vendor_name") if extracted else None
+    total = extracted.get("total_amount") if extracted else None
+    currency = extracted.get("currency", "") if extracted else ""
+    total_str = f"{currency} {total}".strip() if total is not None else None
+    inv_id = str(invoice.id)
+
+    if not success:
+        if tenant_settings and tenant_settings.notify_on_failure and tenant:
+            notify_extraction_failed(tenant.email, inv_id, error)
+        return
+
+    if tenant_settings and tenant_settings.notify_on_upload and tenant:
+        notify_extraction_complete(tenant.email, vendor, inv_id, total_str)
+
+    # Notify approvers that an invoice needs review
+    approvers = await db.execute(
+        select(User).where(
+            User.tenant_id == invoice.tenant_id,
+            User.is_active == True,
+            (User.role == "owner") | (User.can_approve == True),
+        )
+    )
+    for approver in approvers.scalars().all():
+        if approver.id != invoice.uploaded_by:
+            notify_approval_needed(approver.email, vendor, inv_id, total_str)
 
 
 async def update_vendor_profile(

@@ -28,10 +28,15 @@ export default function VendorDetail() {
             <span className="text-xs bg-blue-900/40 text-blue-400 border border-blue-700 px-2 py-0.5 rounded">recurring</span>
           )}
         </div>
+        <p className="text-gray-500 text-xs mt-1">
+          Amounts in {data.tenant_currency || vendor.display_currency}
+        </p>
         <div className="grid grid-cols-3 gap-4 mt-4 max-w-lg">
           <div className="bg-gray-900 border border-gray-800 rounded p-3">
             <p className="text-gray-500 text-xs">Total spend</p>
-            <p className="text-white font-bold">{Number(vendor.total_spend).toLocaleString()}</p>
+            <p className="text-white font-bold">
+              {vendor.display_currency} {Number(vendor.display_total_spend ?? 0).toLocaleString()}
+            </p>
           </div>
           <div className="bg-gray-900 border border-gray-800 rounded p-3">
             <p className="text-gray-500 text-xs">Invoices</p>
@@ -40,7 +45,9 @@ export default function VendorDetail() {
           <div className="bg-gray-900 border border-gray-800 rounded p-3">
             <p className="text-gray-500 text-xs">Average</p>
             <p className="text-white font-bold">
-              {vendor.average_invoice ? Number(vendor.average_invoice).toLocaleString() : '—'}
+              {vendor.display_average_invoice != null
+                ? `${vendor.display_currency} ${Number(vendor.display_average_invoice).toLocaleString()}`
+                : '—'}
             </p>
           </div>
         </div>
@@ -62,8 +69,10 @@ export default function VendorDetail() {
             </div>
             <div className="flex justify-between mt-1">
               <span className="text-gray-500 text-xs">{new Date(inv.upload_date).toLocaleDateString()}</span>
-              {inv.total_amount != null && (
-                <span className="text-white text-sm">{inv.currency} {Number(inv.total_amount).toLocaleString()}</span>
+              {inv.display_amount != null && (
+                <span className="text-white text-sm">
+                  {inv.display_currency} {Number(inv.display_amount).toLocaleString()}
+                </span>
               )}
             </div>
           </Link>

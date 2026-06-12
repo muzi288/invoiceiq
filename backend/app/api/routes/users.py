@@ -7,7 +7,9 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_owner, get_current_user
 from app.core.security import hash_password
 from app.models.user import User
+from app.models.tenant import Tenant
 from app.services.audit_service import log_action
+from app.services.notification_service import notify_staff_invite
 from app.schemas.user import (
     InviteUserRequest,
     UpdatePermissionsRequest,
@@ -52,19 +54,32 @@ async def invite_user(
             detail="Email already registered"
         )
 
+    temp_password = "ChangeMe123!"
     new_user = User(
         id=uuid.uuid4(),
         tenant_id=current_user.tenant_id,
         email=data.email,
-        hashed_password=hash_password("ChangeMe123!"),
+        hashed_password=hash_password(temp_password),
         full_name=data.full_name,
         role=data.role,
         can_approve=False,
         can_export=False,
         email_verified=False,
+        must_change_password=True,
     )
     db.add(new_user)
     await db.flush()
+
+    tenant_result = await db.execute(
+        select(Tenant).where(Tenant.id == current_user.tenant_id)
+    )
+    tenant = tenant_result.scalar_one_or_none()
+    notify_staff_invite(
+        to_email=data.email,
+        full_name=data.full_name,
+        temp_password=temp_password,
+        company_name=tenant.name if tenant else "your company",
+    )
 
     await log_action(
         db=db,

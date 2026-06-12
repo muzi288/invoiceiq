@@ -91,6 +91,43 @@ async def login_user(
         "role": user.role,
         "can_approve": user.can_approve,
         "can_export": user.can_export,
+        "must_change_password": user.must_change_password,
     })
 
-    return TokenResponse(access_token=token)
+    return TokenResponse(
+        access_token=token,
+        must_change_password=user.must_change_password,
+    )
+
+
+async def change_password(
+    user: User,
+    current_password: str,
+    new_password: str,
+    db: AsyncSession,
+) -> TokenResponse:
+    if not verify_password(current_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    if len(new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters",
+        )
+
+    user.hashed_password = hash_password(new_password)
+    user.must_change_password = False
+
+    token = create_access_token({
+        "user_id": str(user.id),
+        "tenant_id": str(user.tenant_id),
+        "role": user.role,
+        "can_approve": user.can_approve,
+        "can_export": user.can_export,
+        "must_change_password": False,
+    })
+
+    return TokenResponse(access_token=token, must_change_password=False)
