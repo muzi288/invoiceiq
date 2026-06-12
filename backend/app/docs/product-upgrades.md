@@ -185,9 +185,14 @@ See **[currency-reporting.md](./currency-reporting.md)** — dashboard and vendo
 
 ---
 
-## Still Out of Scope (Phase 2B+)
+## Phase 2B
 
-- Email verification and forgot-password flows
+See **[phase-2b.md](./phase-2b.md)** — email verification, forgot/reset password, owner onboarding wizard.
+
+---
+
+## Still Out of Scope
+
 - Stripe/billing and plan enforcement
 - Payment-date FX reconciliation when marking invoices paid
 - PostgreSQL RLS policies in migrations

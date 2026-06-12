@@ -39,6 +39,11 @@ export default function Layout({ children }) {
           </div>
         </div>
       </nav>
+      {!user?.email_verified && (
+        <div className="bg-amber-900/40 border-b border-amber-800 text-amber-200 text-sm px-4 py-2 text-center">
+          Please verify your email. Check your inbox or ask your admin to resend from Profile.
+        </div>
+      )}
       <main className="max-w-7xl mx-auto px-4 py-8">{children}</main>
     </div>
   )

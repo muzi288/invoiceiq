@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { login } from '../services/api'
 import useAuthStore from '../store/authStore'
 
@@ -9,6 +9,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false)
   const { setAuth } = useAuthStore()
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const registered = searchParams.get('registered') === 'true'
+  const reset = searchParams.get('reset') === '1'
 
   const handleSubmit = async (e) => {
     e.preventDefault()
@@ -21,6 +24,8 @@ export default function Login() {
       // Decode JWT to get user info
       const payload = JSON.parse(atob(token.split('.')[1]))
       const mustChange = res.data.must_change_password || payload.must_change_password
+      const emailVerified = res.data.email_verified ?? payload.email_verified ?? true
+      const onboardingDone = res.data.onboarding_completed ?? payload.onboarding_completed ?? true
       setAuth(token, {
         user_id: payload.user_id,
         tenant_id: payload.tenant_id,
@@ -29,8 +34,12 @@ export default function Login() {
         can_export: payload.can_export,
         email: form.email,
         must_change_password: !!mustChange,
+        email_verified: !!emailVerified,
+        onboarding_completed: !!onboardingDone,
       })
-      navigate(mustChange ? '/profile?setup=1' : '/dashboard')
+      if (mustChange) navigate('/profile?setup=1')
+      else if (payload.role === 'owner' && !onboardingDone) navigate('/onboarding')
+      else navigate('/dashboard')
     } catch (err) {
       setError(err.response?.data?.detail || 'Login failed')
     } finally {
@@ -45,6 +54,16 @@ export default function Login() {
           <h1 className="text-3xl font-bold text-white mb-1">InvoiceIQ</h1>
           <p className="text-gray-400 text-sm">Sign in to your account</p>
         </div>
+        {registered && (
+          <div className="bg-amber-900/30 border border-amber-700 text-amber-300 px-4 py-3 text-sm rounded mb-4">
+            Account created. Check your email to verify, then sign in.
+          </div>
+        )}
+        {reset && (
+          <div className="bg-green-900/30 border border-green-700 text-green-400 px-4 py-3 text-sm rounded mb-4">
+            Password updated. You can sign in now.
+          </div>
+        )}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="bg-red-900/30 border border-red-700 text-red-400 px-4 py-3 text-sm rounded">
@@ -62,7 +81,12 @@ export default function Login() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Password</label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-sm text-gray-400">Password</label>
+              <Link to="/forgot-password" className="text-xs text-amber-400 hover:text-amber-300">
+                Forgot password?
+              </Link>
+            </div>
             <input
               type="password"
               value={form.password}

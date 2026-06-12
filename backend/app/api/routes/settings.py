@@ -6,7 +6,11 @@ from app.core.database import get_db
 from app.core.dependencies import get_current_user, get_current_owner
 from app.models.tenant_settings import TenantSettings
 from app.models.user import User
-from app.schemas.tenant import TenantSettingsResponse, TenantSettingsUpdate
+from app.schemas.tenant import (
+    TenantSettingsResponse,
+    TenantSettingsUpdate,
+    OnboardingRequest,
+)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -56,5 +60,32 @@ async def update_settings(
     updates = data.model_dump(exclude_unset=True)
     for field, value in updates.items():
         setattr(settings, field, value)
+
+    return settings
+
+
+@router.post("/onboarding", response_model=TenantSettingsResponse)
+async def complete_onboarding(
+    data: OnboardingRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_owner),
+):
+    result = await db.execute(
+        select(TenantSettings).where(
+            TenantSettings.tenant_id == current_user.tenant_id
+        )
+    )
+    settings = result.scalar_one_or_none()
+
+    if not settings:
+        from fastapi import HTTPException, status
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Settings not found",
+        )
+
+    settings.default_currency = data.default_currency
+    settings.timezone = data.timezone
+    settings.onboarding_completed = True
 
     return settings

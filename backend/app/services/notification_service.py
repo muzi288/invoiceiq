@@ -85,6 +85,34 @@ def notify_staff_invite(
     )
 
 
+def notify_email_verification(to_email: str, full_name: str, token: str) -> None:
+    link = f"{settings.FRONTEND_URL}/verify-email?token={token}"
+    send_email(
+        to=to_email,
+        subject="InvoiceIQ — verify your email",
+        body_text=(
+            f"Hi {full_name},\n\n"
+            f"Please verify your email to finish setting up InvoiceIQ.\n\n"
+            f"Verify: {link}\n\n"
+            f"If you did not create an account, ignore this email."
+        ),
+    )
+
+
+def notify_password_reset(to_email: str, full_name: str, token: str) -> None:
+    link = f"{settings.FRONTEND_URL}/reset-password?token={token}"
+    send_email(
+        to=to_email,
+        subject="InvoiceIQ — reset your password",
+        body_text=(
+            f"Hi {full_name},\n\n"
+            f"We received a request to reset your password.\n\n"
+            f"Reset: {link}\n\n"
+            f"This link expires in 1 hour. If you did not request this, ignore this email."
+        ),
+    )
+
+
 def notify_approval_needed(
     to_email: str, vendor_name: str | None, invoice_id: str, total: str | None,
 ) -> None:

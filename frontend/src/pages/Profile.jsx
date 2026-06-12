@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useMutation } from '@tanstack/react-query'
-import { changePassword } from '../services/api'
+import { changePassword, resendVerification } from '../services/api'
 import useAuthStore from '../store/authStore'
 import Layout from '../components/Layout'
 
@@ -17,6 +17,17 @@ export default function Profile() {
   const [form, setForm] = useState({ current: '', newPassword: '', confirm: '' })
   const [error, setError] = useState('')
   const [success, setSuccess] = useState(false)
+  const [verifySent, setVerifySent] = useState(false)
+
+  const handleResendVerify = async () => {
+    if (!user?.email) return
+    try {
+      await resendVerification(user.email)
+      setVerifySent(true)
+    } catch {
+      setError('Could not resend verification email')
+    }
+  }
 
   const mutation = useMutation({
     mutationFn: () => changePassword({
@@ -62,7 +73,24 @@ export default function Profile() {
         </p>
       )}
       {!forced && user?.email && (
-        <p className="text-gray-500 text-sm mb-6">{user.email}</p>
+        <div className="mb-6">
+          <p className="text-gray-500 text-sm">{user.email}</p>
+          {!user.email_verified && (
+            <div className="mt-2">
+              <p className="text-amber-400 text-xs mb-2">Email not verified yet.</p>
+              <button
+                type="button"
+                onClick={handleResendVerify}
+                className="text-xs text-amber-400 hover:text-amber-300 underline"
+              >
+                Resend verification email
+              </button>
+              {verifySent && (
+                <p className="text-green-400 text-xs mt-1">Sent — check your inbox or backend console.</p>
+              )}
+            </div>
+          )}
+        </div>
       )}
 
       {success ? (

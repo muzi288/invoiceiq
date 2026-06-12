@@ -32,6 +32,10 @@ export const register = (data) => api.post('/auth/register', data)
 export const login = (data) => api.post('/auth/login', data)
 export const logout = () => api.post('/auth/logout')
 export const changePassword = (data) => api.post('/auth/change-password', data)
+export const verifyEmail = (token) => api.get('/auth/verify-email', { params: { token } })
+export const resendVerification = (email) => api.post('/auth/resend-verification', { email })
+export const forgotPassword = (email) => api.post('/auth/forgot-password', { email })
+export const resetPassword = (data) => api.post('/auth/reset-password', data)
 
 // Invoices
 export const getInvoices = (params) => api.get('/invoices', { params })
@@ -65,6 +69,7 @@ export const getAuditLog = (params) => api.get('/audit', { params })
 // Settings
 export const getSettings = () => api.get('/settings')
 export const updateSettings = (data) => api.patch('/settings', data)
+export const completeOnboarding = (data) => api.post('/settings/onboarding', data)
 
 // Export
 export const exportInvoices = (params) => api.get('/exports/invoices', {

@@ -77,14 +77,11 @@ Toggle upload/failure notifications in **Settings**.
 
 ---
 
-## Phase 2B — planned next
+## Phase 2B
 
-- Email verification (`verification_token` on User model)
-- Forgot password / reset link
-- Onboarding wizard after registration
-- Stripe billing + plan limits
-- Custom tenant categories
-- Automated tests + CI
+See **[phase-2b.md](./phase-2b.md)** — completed: verification, password reset, onboarding.
+
+Still planned: Stripe, custom categories, tests + CI.
 
 ---
 

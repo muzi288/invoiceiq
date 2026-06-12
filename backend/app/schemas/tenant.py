@@ -22,6 +22,11 @@ class TenantSettingsUpdate(BaseModel):
     notify_on_failure: bool | None = None
 
 
+class OnboardingRequest(BaseModel):
+    default_currency: str
+    timezone: str
+
+
 class TenantSettingsResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID
@@ -30,5 +35,6 @@ class TenantSettingsResponse(BaseModel):
     logo_url: str | None
     notify_on_upload: bool
     notify_on_failure: bool
+    onboarding_completed: bool
 
     model_config = {"from_attributes": True}

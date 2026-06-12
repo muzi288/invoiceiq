@@ -18,6 +18,18 @@ class UserListResponse(BaseModel):
     items: list["UserResponse"]
 
 
+class MeResponse(BaseModel):
+    id: uuid.UUID
+    email: EmailStr
+    full_name: str
+    role: str
+    email_verified: bool
+    must_change_password: bool
+    onboarding_completed: bool
+
+    model_config = {"from_attributes": True}
+
+
 class UserResponse(BaseModel):
     id: uuid.UUID
     tenant_id: uuid.UUID

@@ -8,6 +8,7 @@ from app.core.dependencies import get_current_owner, get_current_user
 from app.core.security import hash_password
 from app.models.user import User
 from app.models.tenant import Tenant
+from app.models.tenant_settings import TenantSettings
 from app.services.audit_service import log_action
 from app.services.notification_service import notify_staff_invite
 from app.schemas.user import (
@@ -15,9 +16,34 @@ from app.schemas.user import (
     UpdatePermissionsRequest,
     UserResponse,
     UserListResponse,
+    MeResponse,
 )
 
 router = APIRouter(prefix="/users", tags=["users"])
+
+
+@router.get("/me", response_model=MeResponse)
+async def get_me(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    settings_result = await db.execute(
+        select(TenantSettings).where(
+            TenantSettings.tenant_id == current_user.tenant_id
+        )
+    )
+    settings = settings_result.scalar_one_or_none()
+    return {
+        "id": current_user.id,
+        "email": current_user.email,
+        "full_name": current_user.full_name,
+        "role": current_user.role,
+        "email_verified": current_user.email_verified,
+        "must_change_password": current_user.must_change_password,
+        "onboarding_completed": (
+            settings.onboarding_completed if settings else True
+        ),
+    }
 
 
 @router.get("", response_model=UserListResponse)
@@ -64,7 +90,7 @@ async def invite_user(
         role=data.role,
         can_approve=False,
         can_export=False,
-        email_verified=False,
+        email_verified=True,
         must_change_password=True,
     )
     db.add(new_user)
